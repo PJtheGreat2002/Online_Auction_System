@@ -2,7 +2,7 @@ import streamlit as st
 import bcrypt
 import pandas as pd
 from datetime import datetime
-from db_manager import add_item_to_auction, get_active_auctions,get_user_bids, get_items_by_auction, register_user, login_user, create_auction, get_user_by_username, place_bid
+from db_manager import add_item_to_auction, get_active_auctions, get_item_by_id,get_user_bids, get_items_by_auction, register_user, login_user, create_auction, get_user_by_username, place_bid
 
 
 # User Authentication
@@ -16,32 +16,6 @@ def authenticate(username, password):
 def main():
     st.title("Online Auction System")
 
-    # menu = ["Home", "Login", "Register", "Create Auction", "View Auctions", "Add Items", "Your Bids"]
-    # choice = st.sidebar.selectbox("Menu", menu)
-
-    # if choice == "Home":
-    #     st.subheader("Welcome to the Online Auction System")
-
-    # elif choice == "Login":
-    #     login()
-
-    # elif choice == "Register":
-    #     register()
-
-    # elif choice == "Create Auction":
-    #     create_auction_page()
-    
-    # elif choice == "Add Items":
-    #     add_items_page()
-
-    # elif choice == "View Auctions":
-    #     view_auctions_page()
-
-    # elif choice == "Your Bids":
-    #     view_bids_page()
-    # Check if the user is logged in
-     # Check if the user is logged in
-    # Check if the user is logged in
     if 'user_id' in st.session_state:
         page = st.session_state.get('page', "View Auctions")  # Default to "View Auctions"
         
@@ -53,6 +27,8 @@ def main():
             place_bid_page()  # Call the Place Bid page when selected
         elif page == "Your Bids":
             view_bids_page()
+        elif page == "Create Auctions":
+            create_auction_page()
     else:
         # Show login or register options
         option = st.sidebar.radio("Options", ["Login", "Register"])
@@ -78,6 +54,8 @@ def login():
                 st.session_state['page'] = "View Auctions"
             elif user[1] == 'seller':
                 st.session_state['page'] = "Add Items"
+            elif user[1] == 'admin':
+                st.session_state['page'] = "Create Auctions"
 
             st.rerun()
         else:
@@ -88,7 +66,7 @@ def register():
     username = st.text_input("Username")
     password = st.text_input("Password", type='password')
     email = st.text_input("Email")
-    user_type = st.selectbox("Select User Type", ["buyer", "seller"])
+    user_type = st.selectbox("Select User Type", ["buyer", "seller","admin"])
     
     if st.button("Register"):
         if register_user(username, email, password, user_type):
@@ -107,6 +85,11 @@ def create_auction_page():
         user_id = 1  # Replace with authenticated user_id in real scenario
         create_auction(title, description, starting_price, auction_end_time, user_id)
         st.success("Auction created successfully!")
+
+    if st.button("View Auctions"):
+            st.session_state['page'] = "View Auctions"
+            st.rerun()  # Refresh to show the "View Auctions" page
+
 
 #Define Add Items page
 def add_items_page():
@@ -143,13 +126,19 @@ def view_auctions_page():
         items = get_items_by_auction(auction['auction_id'])
 
         if items:
-            # Convert items list to DataFrame for tabular format
-            #items_df = pd.DataFrame(items)
+             # Convert items list to DataFrame for tabular format
+            items_df = pd.DataFrame(items)
+
+            # Display items in a tabular format with selected columns
+            st.dataframe(items_df[['name', 'description', 'starting_bid']])
+
             for item in items:
-                st.write(f"**{item['name']}**")
-                st.write(f"Description: {item['description']}")
-                st.write(f"Starting Bid: {item['starting_bid']}")
+                # st.write(f"**{item['name']}**")
+                # st.write(f"Description: {item['description']}")
+                # st.write(f"Starting Bid: {item['starting_bid']}")
                 
+                #if user_type['seller'] == 'Seller'
+
                 # Button to place a bid
                 if st.button(f"Bid on {item['name']}", key=item['item_id']):
                     # Set the session state to go to the place bid page
@@ -165,51 +154,57 @@ def view_auctions_page():
 def place_bid_page():
     st.title("Place Your Bid")
 
-    # Retrieve the item ID from the session state
+    # Retrieve the item_id from session state
     item_id = st.session_state.get('current_item_id')
-
+    
     if item_id:
-        # Fetch item details using the item_id
-        items = get_items_by_auction(item_id)  # This returns a list of items
+        # Fetch the item details using the item_id
+        item = get_item_by_id(item_id)
 
-        # Assuming you want to find the item with the correct item_id
-        item = next((i for i in items if i['item_id'] == item_id), None)
-
-        # Check if the item exists
         if item:
             st.subheader(f"Placing bid for: {item['name']}")
             
-            # Print the item for debugging purposes
-            st.write(f"Item details: {item}")
-            
-            # Check if 'current_price' exists or use an alternative key like 'starting_bid'
-            price_key = 'current_price' if 'current_price' in item else 'starting_bid'
-            
-            # Convert to float to ensure all inputs are of the same type
-            current_price = float(item[price_key])
-            starting_bid = float(item['starting_bid'])
+            # Create a DataFrame for the item details
+            item_details = {
+                'Item Name': [item['name']],
+                'Description': [item['description']],
+                'Starting Bid': [item['starting_bid']],
+                'Current Price': [item['current_price']]
+            }
+            item_df = pd.DataFrame(item_details)
+
+            # Display the item details in tabular format
+            st.dataframe(item_df)
+
+            # Handle empty or invalid 'current_price' and 'starting_bid' values
+            try:
+                current_price = float(item['current_price']) if item['current_price'] else float(item['starting_bid'])
+            except ValueError:
+                current_price = float(item['starting_bid'])  # Use starting_bid as fallback if current_price is invalid
 
             st.write(f"Current Price: {current_price}")
 
-            # Now all arguments for st.number_input are floats
-            bid_amount = st.number_input("Enter your bid amount", min_value=starting_bid, format="%.2f")
+            # Allow user to input their bid amount (should be >= current price)
+            bid_amount = st.number_input("Enter your bid amount", min_value=current_price, format="%.2f")
 
             if st.button("Confirm Bid"):
-                place_bid(item_id, st.session_state['user_id'], bid_amount,)
+                # Place the bid using the item_id, user_id, and bid_amount
+                place_bid(item_id, st.session_state['user_id'], bid_amount)
                 st.success("Your bid has been placed successfully!")
         else:
             st.error("Item not found. Please try again.")
-            st.write(f"Debug Info: item_id={item_id}, items={items}")
+            st.write(f"Debug Info: item_id={item_id}")
     else:
         st.error("No item selected to place a bid.")
     
-    # Optionally add a button to go back to auctions
+    # Option to go back to auctions or view user's bids
     if st.button("Back to Auctions"):
         st.session_state['page'] = "View Auctions"
-        st.rerun()  # Redirect back to the View Auctions page
-    if st.button("Go to your Bids"):
+        st.rerun()
+    
+    if st.button("Go to Your Bids"):
         st.session_state['page'] = "Your Bids"
-        st.rerun()  # Redirect back to the View Auctions page
+        st.rerun()
 
 
 def view_bids_page():

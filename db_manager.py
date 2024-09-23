@@ -13,7 +13,6 @@ def get_connection():
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-
 # Fetch all active auctions
 def get_active_auctions():
     conn = get_connection()
@@ -109,6 +108,23 @@ def place_bid(item_id, user_id, bid_amount):
     conn.commit()
     conn.close()
 
+def get_item_by_id(item_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM items WHERE item_id = %s", (item_id,))
+    item = cursor.fetchone()
+    conn.close()
+    if item:
+        return {
+            'item_id': item[0],
+            'name': item[2],  # Assuming 'name' is the third column
+            'description': item[3],
+            'starting_bid': item[5] if item[5] is not None else 0.0,  # Default to 0.0 if None
+            'current_price': item[4] if item[4] is not None else item[5]  # Default to starting_bid if current_price is None
+        }
+    return None
+
+
 def get_user_bids(user_id):
     # Query to fetch user's bids
     query = """
@@ -129,3 +145,12 @@ def get_user_bids(user_id):
     conn.close()
     
     return user_bids
+
+def delete_bid(bid_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        DELETE FROM bids WHERE bid_id = %s
+    """, (bid_id,))
+    conn.commit()
+    conn.close()
